@@ -1,22 +1,28 @@
 import random
 import math
-import matplotlib.pyplot as plt
+import json
+import os
+from utils import (
+    load_or_generate_cities,
+    load_best_routes,
+    save_best_route,
+    plot_results
+)
 
 # Configurações
 NUM_CITIES = 20
 POPULATION_SIZE = 200
 GENERATIONS = 500
 BASE_MUTATION_RATE = 0.1
-OPTIMAL_DISTANCE = 300  # Alvo desejado
+OPTIMAL_DISTANCE = 300
 OPTIMAL_FITNESS = 1 / OPTIMAL_DISTANCE
-
-# Gerar cidades aleatórias com coordenadas (x, y)
-cities = [(random.uniform(0, 100), random.uniform(0, 100)) for _ in range(NUM_CITIES)]
+USE_ELITE = False
+cities = load_or_generate_cities(NUM_CITIES)
+cities = [tuple(city) for city in cities]
 
 def euclidean_distance(a, b):
     return math.hypot(a[0] - b[0], a[1] - b[1])
 
-# Matriz de distâncias
 distances = [[euclidean_distance(c1, c2) for c2 in cities] for c1 in cities]
 
 class Individual:
@@ -65,20 +71,17 @@ population = [Individual() for _ in range(POPULATION_SIZE)]
 best_individual = max(population, key=lambda ind: ind.fitness)
 best_distance = 1 / best_individual.fitness
 stagnant_generations = 0
+elite_pool = load_best_routes() if USE_ELITE else []
 
 for generation in range(GENERATIONS):
     new_population = []
 
-    if stagnant_generations >= 20:
-        mutation_rate = min(0.9, BASE_MUTATION_RATE * 2)
-    else:
-        mutation_rate = BASE_MUTATION_RATE
+    mutation_rate = min(0.9, BASE_MUTATION_RATE * 2) if stagnant_generations >= 20 else BASE_MUTATION_RATE
 
-    # Elitismo
     new_population.append(best_individual)
 
     while len(new_population) < POPULATION_SIZE - 2:
-        parent1 = tournament_selection(population)
+        parent1 = random.choice(elite_pool) if USE_ELITE and elite_pool and random.random() < 0.3 else tournament_selection(population)
         parent2 = tournament_selection(population)
         child = crossover(parent1, parent2)
         mutate(child, mutation_rate)
@@ -101,7 +104,6 @@ for generation in range(GENERATIONS):
     distance_progress.append(best_distance)
     print(f"Geração {generation}: Melhor distância = {best_distance:.2f}")
 
-    # Parar se atingir o alvo definido
     if current_best.fitness >= OPTIMAL_FITNESS:
         print(f"\nSolução satisfatória atingida na geração {generation} com distância {current_distance:.2f}")
         break
@@ -110,24 +112,5 @@ print("\nMelhor rota encontrada:")
 print(best_individual.genes)
 print(f"Distância total: {best_distance:.2f}")
 
-# Plotar a rota final
-x = [cities[i][0] for i in best_individual.genes] + [cities[best_individual.genes[0]][0]]
-y = [cities[i][1] for i in best_individual.genes] + [cities[best_individual.genes[0]][1]]
-
-plt.figure(figsize=(10, 5))
-plt.subplot(1, 2, 1)
-plt.plot(distance_progress)
-plt.title("Evolução da Distância (TSP)")
-plt.xlabel("Geração")
-plt.ylabel("Distância da Melhor Rota")
-plt.grid(True)
-
-plt.subplot(1, 2, 2)
-plt.plot(x, y, marker='o')
-plt.title("Melhor Rota Encontrada")
-plt.xlabel("X")
-plt.ylabel("Y")
-plt.grid(True)
-
-plt.tight_layout()
-plt.show()
+save_best_route(best_individual.genes, best_distance)
+plot_results(distance_progress, best_individual.genes, cities)
